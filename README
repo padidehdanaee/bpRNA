@@ -1,0 +1,25 @@
+bpRNA: Large-scale Automated Annotation and Analysis of RNA Secondary Structure
+Padideh Danee1, Mason Rouches2, Michelle Wiley2, Dezhong Deng1, Liang Huang1, David Hendrix1,2
+
+1School of Electrical Engineering and Computer Science
+2Department of Biochemistry and Biophysics
+
+
+ABSTRACT
+
+While RNA secondary structure prediction from sequence data has made remarkable progress, there is a need for improved strategies for annotating the features of RNA secondary structures. Here we present bpRNA, a novel annotation tool capable of parsing RNA structures, including complex pseudoknot-containing RNAs, to yield an objective, precise, compact, unambiguous, easily-interpretable description of all loops, stems, and pseudoknots, along with the positions, sequence, and flanking base pairs of each such structural feature. We also introduce several new informative representations of RNA structure types to improve structure visualization and interpretation. We have further used bpRNA to generate a web-accessible meta-database, "bpRNA-1m", of over 100,000 single-molecule, known secondary structures; this is both more fully and accurately annotated and over 20-times larger than existing databases.  We use a subset of the database with highly similar (≥90% identical) sequences filtered out to report on statistical trends in sequence, flanking base pairs, and length. Both the bpRNA method and the bpRNA-1m database will be valuable resources both for specific analysis of individual RNA molecules and large-scale analyses such as are useful for updating RNA energy parameters for computational thermodynamic predictions, improving machine learning models for structure prediction, and for benchmarking structure-prediction algorithms. 
+
+###############################################################################
+
+The code is available here as bpRNA.pl in perl language. To use the bpRNA script, one needs a bpseq file as an input. The output of the bpRNA is the structure file with all the details on segments, stems, hairpins, bulges, internal loops, multiloops, and pseudoknots. Moreover, bpRNA provides efficient dotbracket notations and other structural representations. Here is an example on how the bpRNA.pl can be run and the results:
+
+$perl bpRNA.pl bpRNA_PDB_650.bpseq 
+
+The output is bpRNA_PDB_650.st 
+
+We used bpRNA to create a meta-database, “bpRNA-1m”, which contains 102,318 single- molecule RNA structures along with their secondary structure details. 
+
+All the code and resources for bpRNA(1m) is provided here for further usage.  
+
+ 
+
