@@ -5,15 +5,27 @@ use strict;
 #####################################################################
 # 2018  Padideh Danaee,Michelle Wiley, Mason Rouches, David Hendrix #
 # http://hendrixlab.cgrb.oregonstate.edu                            #
+# ----------------------------------------------------------------- #              
+# MAIN                                                              #
 #####################################################################
 
 my $DEBUG = 0;
-my $usage = "Usage:\n$0 <bpseq file> \n";
+my $usage = "Usage:\n$0 <bpseq file or dot-bracket file> \n";
 
-my $bpSeqFile = $ARGV[0] or die $usage;
-my($id) = $bpSeqFile =~ /([^\/]*?)\.bpseq/ or die "Could not parse filename: $bpSeqFile\n";
+my $inputFile = $ARGV[0] or die $usage;
 
-my($bp,$seq) = readBPSeqFile($bpSeqFile);
+my($id,$bp,$seq);
+
+if(isBPSeqFile($inputFile)) {
+    ($id) = $inputFile =~ /([^\/]*?)\.bpseq/ or die "Could not parse BPSEQ filename: $inputFile\nExpected file extension \".bpseq\"";
+    ($bp,$seq) = readBPSeqFile($inputFile);
+} elsif(isDotBracketFile($inputFile)) {
+    ($id) = $inputFile =~ /([^\/]*?)\.dbn/ or die "Could not parse dotbacket filename: $inputFile\nExpected file extension \".dbn\"";
+    ($bp,$seq) = readDotBracketFile($inputFile);    
+} else {
+    die "Could not determine file type. Expecting BPSEQ or DBN (dot-bracket) file formats.";
+}
+
 if(keys %{$bp}) {
     my $allSegments = getSegments($bp);
     for(my $i=0;$i<@{$allSegments};$i++) {
@@ -1290,6 +1302,15 @@ sub isPathGraph {
     }
 }
 
+sub min {
+    my($x,$y) = @_;
+    if($x < $y) {
+	return $x;
+    } else {
+	return $y;
+    }
+}
+
 sub max {
     my($a,$b) = @_;
     if($b > $a) {
@@ -1409,12 +1430,84 @@ sub includesKnot {
     return @loopKnots;
 }
 
-sub min {
-    my($x,$y) = @_;
-    if($x < $y) {
-	return $x;
+sub pairMap {
+    my ($dotbracket) = @_;
+    my @map;
+    my %stack;
+    for (my $i=0; $i<length($dotbracket); $i++) {
+	my $c = substr($dotbracket,$i,1);
+        if($c =~ /[\(\[\<\{A-Z]/){
+	    # left symbols
+            push(@{$stack{$c}},$i);
+        } elsif($c =~ /[\)\]\>\}a-z]/){
+	    # right symbols
+            my $C = charMap($c);
+            my $pos = pop(@{$stack{$C}});
+	    # 0-based to 1-based. See print above.
+            $map[$pos] = $i+1;
+            $map[$i] = $pos+1;
+	    #print "$pos ", $i+1, "\n";
+        } elsif($c =~ /[-_,:.]/) {
+            $map[$i] = "0";
+        } else {
+            die "Unknown character $c found in\n$dotbracket\n";
+        }
+    }
+    return @map;
+}
+
+sub charMap {
+    my($c) = @_;
+    if($c eq ")") {
+	return "(";
+    } elsif($c eq "]") {
+        return "[";
+    } elsif($c eq ">") {
+        return "<";
+    } elsif($c eq "}") {
+        return "{";
+    } elsif($c =~ /[a-z]/) {
+        return uc($c);
     } else {
-	return $y;
+        die "undefined character in charMap: $c\n";
+    }
+}
+
+#####################
+# INPUT SUBROUTINES #
+#####################
+
+sub isBPSeqFile {
+    my($inputFile) = @_;
+    open(BPS,$inputFile) or die "Could not open $inputFile\n";
+    while(<BPS>) {
+	unless(/^#/) {
+	    chomp;
+	    if(scalar(split()) != 3) {
+		close(BPS);
+		return 0
+	    }
+	}
+    }
+    close(BPS);
+    return 1;
+}
+
+sub isDotBracketFile {
+    my($inputFile) = @_;
+    open(FL,$inputFile) or die "Could not open $inputFile for reading\n";
+    my $defline = <FL>;
+    chomp($defline);
+    my $sequence = <FL>;
+    chomp($sequence);
+    my $dotbracket = <FL>;
+    chomp($dotbracket);
+    close(FL);  
+    unless(substr($defline,0,1) eq ">") {
+	return 0;
+    }
+    unless(length($sequence) == length($dotbracket)) {
+	return 0;
     }
 }
 
@@ -1447,4 +1540,22 @@ sub readBPSeqFile {
 	}
     }
     return(\%bp,$seq);
+}
+
+sub readDotBracketFile{
+    my($dotbracketFile)=@_;
+    open(FL,$dotbracketFile) or die "Could not open $dotbracketFile for reading\n";
+    my $defline = <FL>;
+    chomp($defline);
+    my $sequence = <FL>;
+    chomp($sequence);
+    my $dotbracket = <FL>;
+    chomp($dotbracket);
+    close(FL);
+    my @map=pairMap($dotbracket);
+    my %bp;
+    for(my $i=0;$i<@map;$i++) {
+	$bp{$i+1} = $map[$i];
+    }
+    return(\%bp,$sequence);
 }
