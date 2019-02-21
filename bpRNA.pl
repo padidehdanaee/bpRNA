@@ -1495,18 +1495,33 @@ sub isBPSeqFile {
 
 sub isDotBracketFile {
     my($inputFile) = @_;
-    open(FL,$inputFile) or die "Could not open $inputFile for reading\n";
-    my $defline = <FL>;
-    chomp($defline);
-    my $sequence = <FL>;
-    chomp($sequence);
-    my $dotbracket = <FL>;
-    chomp($dotbracket);
-    close(FL);  
-    unless(substr($defline,0,1) eq ">") {
+    open(IN,$inputFile) or die "Could not open $inputFile for reading\n";
+    my($defline,$sequence,$dotbracket);
+    my @lines;
+    while(<IN>) {
+	unless(/^#/) {
+	    chomp;
+	    push(@lines,$_)
+	}
+    }
+    if(@lines == 2) {
+	$sequence = $lines[0];
+	$dotbracket = $lines[1];
+    } elsif(@lines == 3) {
+	$defline = $lines[0];
+	$sequence = $lines[1];
+	$dotbracket = $lines[2];
+    } else {
 	return 0;
     }
-    unless(length($sequence) == length($dotbracket)) {
+    if($defline) {
+	unless(substr($defline,0,1) eq ">") {
+	    return 0;
+	}
+    }
+    if(length($sequence) == length($dotbracket)) {
+	return 1;
+    } else {
 	return 0;
     }
 }
@@ -1544,14 +1559,24 @@ sub readBPSeqFile {
 
 sub readDotBracketFile{
     my($dotbracketFile)=@_;
-    open(FL,$dotbracketFile) or die "Could not open $dotbracketFile for reading\n";
-    my $defline = <FL>;
-    chomp($defline);
-    my $sequence = <FL>;
-    chomp($sequence);
-    my $dotbracket = <FL>;
-    chomp($dotbracket);
-    close(FL);
+    open(IN,$dotbracketFile) or die "Could not open $dotbracketFile for reading\n";
+    my($defline,$sequence,$dotbracket);
+    my @lines;
+    while(<IN>) {
+	unless(/^#/) {
+	    chomp;
+	    push(@lines,$_)
+	}
+    }
+    if(@lines == 2) {
+	$sequence = $lines[0];
+	$dotbracket = $lines[1];
+    } elsif(@lines == 3) {
+	$defline = $lines[0];
+	$sequence = $lines[1];
+	$dotbracket = $lines[2];
+    }
+    close(IN);
     my @map=pairMap($dotbracket);
     my %bp;
     for(my $i=0;$i<@map;$i++) {
