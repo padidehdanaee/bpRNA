@@ -1557,7 +1557,7 @@ sub readBPSeqFile {
     return(\%bp,$seq);
 }
 
-sub readDotBracketFile{
+sub readDotBracketFile {
     my($dotbracketFile)=@_;
     open(IN,$dotbracketFile) or die "Could not open $dotbracketFile for reading\n";
     my($defline,$sequence,$dotbracket);
@@ -1584,3 +1584,28 @@ sub readDotBracketFile{
     }
     return(\%bp,$sequence);
 }
+
+sub dotBracketToStructureArray {
+    my($seq,$dotbracket) = @_;
+
+    # default to all external loops
+    $s = "E" x length($seq);
+
+    # if there are basepairs
+    my %bp;
+    my @map=pairMap($dotbracket);
+    for(my $i=0;$i<@map;$i++) {
+	$bp{$i+1} = $map[$i];
+    }
+    
+    if(keys %{$bp}) {
+	my $allSegments = getSegments(\%bp);
+	my($segments,$knots,$warnings) = separateSegments($allSegments);
+	my $bp = filterBasePairs(\%bp,$knots);
+	$segments = getSegments($bp);
+	my($dotbracket,$s,$k,$structureTypes,$pageNumber) = buildStructureMap($segments,$knots,$bp,$seq);
+    }
+    $s = join("",@{$s});
+    return $s
+}
+    
