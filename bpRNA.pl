@@ -107,7 +107,7 @@ sub printStructureTypes {
 
 sub buildStructureMap {
     my($segments,$knots,$bp,$seq) = @_;
-    my($G,$edges) = buildSegmentGraph($bp,$segments,$knots);
+    my($G,$edges) = buildSegmentGraph($seq,$bp,$segments,$knots);
     my($dotbracket,$pageNumber) = computeDotBracket($segments,$knots,$seq);
     my($s,$pk) = computeStructureArray($dotbracket,$bp,$seq);
     my %edges;
@@ -485,7 +485,7 @@ sub buildStructureMap {
 }
 
 sub buildSegmentGraph {
-    my($bp,$segments,$knots) = @_;
+    my($seq,$bp,$segments,$knots) = @_;
     # 
     # 5'start   3'stop
     #       ACGUA
@@ -1501,7 +1501,9 @@ sub isDotBracketFile {
     while(<IN>) {
 	unless(/^#/) {
 	    chomp;
-	    push(@lines,$_)
+	    if($_) {
+		push(@lines,$_)
+	    }
 	}
     }
     if(@lines == 2) {
@@ -1565,7 +1567,9 @@ sub readDotBracketFile {
     while(<IN>) {
 	unless(/^#/) {
 	    chomp;
-	    push(@lines,$_)
+	    if($_) {
+		push(@lines,$_)
+	    }
 	}
     }
     if(@lines == 2) {
@@ -1588,9 +1592,6 @@ sub readDotBracketFile {
 sub dotBracketToStructureArray {
     my($seq,$dotbracket) = @_;
 
-    # default to all external loops
-    $s = "E" x length($seq);
-
     # if there are basepairs
     my %bp;
     my @map=pairMap($dotbracket);
@@ -1598,14 +1599,17 @@ sub dotBracketToStructureArray {
 	$bp{$i+1} = $map[$i];
     }
     
-    if(keys %{$bp}) {
+    if(keys %bp) {
 	my $allSegments = getSegments(\%bp);
 	my($segments,$knots,$warnings) = separateSegments($allSegments);
 	my $bp = filterBasePairs(\%bp,$knots);
 	$segments = getSegments($bp);
 	my($dotbracket,$s,$k,$structureTypes,$pageNumber) = buildStructureMap($segments,$knots,$bp,$seq);
+	$s = join("",@{$s});
+	return $s
+    } else {
+	# default to all external loops
+	my $s = "E" x length($seq);
+	return $s
     }
-    $s = join("",@{$s});
-    return $s
 }
-    
