@@ -296,6 +296,13 @@ sub buildStructureMap {
             $thisStop = $i;
             $prevChar = $s->[$i];
 	    $FIRST = 0;
+	} elsif(($prevChar eq "S")&&($bp->{$i} == $i+1)) {
+	    # in a break in a stem into another stem. store in 1-based
+	    push(@{$regions{$prevChar}},[$thisStart+1,$thisStop+1]);
+	    $thisStart = $i;
+            $thisStop = $i;
+            $prevChar = $s->[$i];
+	    $FIRST = 0;
 	} else {
 	    # continue/extend the same region
 	    $thisStop = $i;
@@ -897,11 +904,11 @@ sub pkQuartet {
 sub getSegments {
     my($bp) = @_;
     #
-    # 5'start   3'stop
-    #       ACGUA
-    #       |||||
-    #       UGCAU
-    # 3'start   5'stop
+    # 5'start    3'stop
+    #       ACG.UA
+    #       ||| ||
+    #       UGCAAU
+    # 3'start    5'stop
     #
     my @allSegments = ();
     my($firstPos,$lastPos) = getExtremePositions($bp);
@@ -929,7 +936,9 @@ sub getSegments {
 			push(@segment,[$n,$p]);
 			$i = $n;
 			$j = $p;	    
-		    } else {		
+		    } else {	
+			#print "closed - $i, $j\n";
+			#print "Found " . scalar(@allSegments) . " segments\n";
 			$INSEGMENT = 0;
 			push(@allSegments,\@segment);		
 		    }
