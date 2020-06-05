@@ -208,7 +208,6 @@ sub buildStructureMap {
 	    my $xCount = 0;
 	    my @c = sort {$edges{"M"}[$a]->[0] <=> $edges{"M"}[$b]->[0]} @{$c};
 	    for my $x (@c) {
-		$xCount++;
 		my($xStart,$xStop) = @{$edges{"M"}[$x]};
 		my $xSeq = substr($seq,$xStart-1,$xStop-$xStart+1);
 		my $bp5_pos1 = $xStart-1;
@@ -222,7 +221,10 @@ sub buildStructureMap {
 		#print "checking $u  at $uStart $uStop\n";
 		my @xKnots = includesKnot($xStart,$xStop,$knots);
 		my $PK = @xKnots ? "PK{".join(',',@xKnots)."}" : "";
-		push(@{$structureTypes{"X"}},"X$xCount $xStart..$xStop \"$xSeq\" ($bp5_pos1,$bp5_pos2) $nuc5_1:$nuc5_2 ($bp3_pos1,$bp3_pos2) $nuc3_1:$nuc3_2 $PK\n") if($xStart < $xStop);
+		if($xStart <= $xStop) {
+		    $xCount++;
+		    push(@{$structureTypes{"X"}},"X$xCount $xStart..$xStop \"$xSeq\" ($bp5_pos1,$bp5_pos2) $nuc5_1:$nuc5_2 ($bp3_pos1,$bp3_pos2) $nuc3_1:$nuc3_2 $PK\n");
+		}
 		for my $k (@xKnots) {
 		    #print "visited $k uKnot";
 		    push(@{$pkLoops{$k}},["X$xCount",$xStart,$xStop]);
