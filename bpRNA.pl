@@ -1,5 +1,6 @@
 #!/usr/bin/perl -w
 use Graph;
+use Graph::Undirected;
 use strict;
 
 #####################################################################
@@ -20,7 +21,7 @@ if(isBPSeqFile($inputFile)) {
     ($id) = $inputFile =~ /([^\/]*?)\.bpseq/ or die "Could not parse BPSEQ filename: $inputFile\nExpected file extension \".bpseq\"";
     ($bp,$seq) = readBPSeqFile($inputFile);
 } elsif(isDotBracketFile($inputFile)) {
-    ($id) = $inputFile =~ /([^\/]*?)\.dbn/ or die "Could not parse dotbacket filename: $inputFile\nExpected file extension \".dbn\"";
+    ($id) = $inputFile =~ /([^\/]*?)\.db/ or die "Could not parse dotbacket filename: $inputFile\nExpected file extension \".dbn\"";
     ($bp,$seq) = readDotBracketFile($inputFile);    
 } else {
     die "Could not determine file type. Expecting BPSEQ or DBN (dot-bracket) file formats.";
@@ -1014,19 +1015,21 @@ sub separateSegments {
 	}
 	$warnings .= $warning;
     }
-    if(@{$segments} == keys(%knot)) {
-	# everything is involved in a PK! 
-	# assign the largest to not be a PK segment
-	my $maxSize = 0;
-	my $maxI;
-	for(my $i=0;$i<@{$segments};$i++) {
-	    if(@{$segments->[$i]} > $maxSize) {
-		$maxI = $i;
-		$maxSize = @{$segments->[$i]}
+    if(@{$segments}) {
+	if(@{$segments} == keys(%knot)) {
+	    # everything is involved in a PK! 
+	    # assign the largest to not be a PK segment
+	    my $maxSize = 0;
+	    my $maxI;
+	    for(my $i=0;$i<@{$segments};$i++) {
+		if(@{$segments->[$i]} > $maxSize) {
+		    $maxI = $i;
+		    $maxSize = @{$segments->[$i]}
+		}
 	    }
+	    # remove largest segment from knot list:
+	    delete($knot{$maxI});
 	}
-	# remove largest segment from knot list:
-	delete($knot{$maxI});
     }
     my @segments;
     my @knots;    
@@ -1525,16 +1528,34 @@ sub isDotBracketFile {
 	$sequence = $lines[1];
 	$dotbracket = $lines[2];
     } else {
+	#die("zone1");
 	return 0;
     }
     if($defline) {
 	unless(substr($defline,0,1) eq ">") {
+	    #die("zone2");
 	    return 0;
 	}
     }
     if(length($sequence) == length($dotbracket)) {
 	return 1;
+    } elsif($dotbracket =~ /\s+/) {
+	# could have an energy term
+	my @terms = split(/\s+/,$dotbracket);
+	if(@terms == 2) {
+	    if(length($terms[0]) == length($sequence)) {
+		$dotbracket = $terms[0];
+		return 1;
+	    } else {
+		die("zone5");
+		return 0;
+	    }
+	} else {
+	    die("zone4");
+	    return 0;
+	}
     } else {
+	die("zone3");
 	return 0;
     }
 }
@@ -1590,6 +1611,11 @@ sub readDotBracketFile {
 	$defline = $lines[0];
 	$sequence = $lines[1];
 	$dotbracket = $lines[2];
+    }
+    if($dotbracket =~ /\s+/) {
+	# could have an energy term
+	my @terms = split(/\s+/,$dotbracket);
+	$dotbracket = $terms[0];
     }
     close(IN);
     my @map=pairMap($dotbracket);
