@@ -154,7 +154,7 @@ sub buildStructureMap {
 	# create a sorted list of multiloops.
 	for my $c (@mCC) {
 	    #print "found CC of size ", scalar(@{$c}), "\n";
-	    if(isMultiLoop($c,$mG)) {
+	    if(isMultiLoop($c,$mG,\%edges)) {
 		# sort the branches of this multiloop by position.
 		my @c = sort {$edges{"M"}[$a]->[0] <=> $edges{"M"}[$b]->[0]} @{$c};
 		push(@multiLoops,\@c);
@@ -659,7 +659,7 @@ sub printStructureData {
 }
 
 sub isMultiLoop() {
-    my($c,$mG) = @_;    
+    my($c,$mG,$edges) = @_;    
     $,=" ";
     # make copy of components
     my @c = @{$c};
@@ -685,6 +685,10 @@ sub isMultiLoop() {
 		return 0;
 	    }
 	    $v = $w;	
+	    unless(my @successors = $mG->successors($v)) {
+		#print "leaving here 3\n";
+		return 0;
+	    }
 	} else {
 	    return 0;
 	}
