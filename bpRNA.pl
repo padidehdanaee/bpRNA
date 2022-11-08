@@ -1,19 +1,32 @@
 #!/usr/bin/perl -w
 use Graph;
+use Graph::Undirected;
 use strict;
 
 #####################################################################
 # 2018  Padideh Danaee,Michelle Wiley, Mason Rouches, David Hendrix #
 # http://hendrixlab.cgrb.oregonstate.edu                            #
+# ----------------------------------------------------------------- #              
+# MAIN                                                              #
 #####################################################################
 
 my $DEBUG = 0;
-my $usage = "Usage:\n$0 <bpseq file> \n";
+my $usage = "Usage:\n$0 <bpseq file or dot-bracket file> \n";
 
-my $bpSeqFile = $ARGV[0] or die $usage;
-my($id) = $bpSeqFile =~ /([^\/]*?)\.bpseq/ or die "Could not parse filename: $bpSeqFile\n";
+my $inputFile = $ARGV[0] or die $usage;
 
-my($bp,$seq) = readBPSeqFile($bpSeqFile);
+my($id,$bp,$seq);
+
+if(isBPSeqFile($inputFile)) {
+    ($id) = $inputFile =~ /([^\/]*?)\.bpseq/ or die "Could not parse BPSEQ filename: $inputFile\nExpected file extension \".bpseq\"";
+    ($bp,$seq) = readBPSeqFile($inputFile);
+} elsif(isDotBracketFile($inputFile)) {
+    ($id) = $inputFile =~ /([^\/]*?)\.db/ or die "Could not parse dotbacket filename: $inputFile\nExpected file extension \".dbn\"";
+    ($bp,$seq) = readDotBracketFile($inputFile);    
+} else {
+    die "Could not determine file type. Expecting BPSEQ or DBN (dot-bracket) file formats.";
+}
+
 if(keys %{$bp}) {
     my $allSegments = getSegments($bp);
     for(my $i=0;$i<@{$allSegments};$i++) {
@@ -95,7 +108,7 @@ sub printStructureTypes {
 
 sub buildStructureMap {
     my($segments,$knots,$bp,$seq) = @_;
-    my($G,$edges) = buildSegmentGraph($bp,$segments,$knots);
+    my($G,$edges) = buildSegmentGraph($seq,$bp,$segments,$knots);
     my($dotbracket,$pageNumber) = computeDotBracket($segments,$knots,$seq);
     my($s,$pk) = computeStructureArray($dotbracket,$bp,$seq);
     my %edges;
@@ -141,7 +154,7 @@ sub buildStructureMap {
 	# create a sorted list of multiloops.
 	for my $c (@mCC) {
 	    #print "found CC of size ", scalar(@{$c}), "\n";
-	    if(isMultiLoop($c,$mG)) {
+	    if(isMultiLoop($c,$mG,\%edges)) {
 		# sort the branches of this multiloop by position.
 		my @c = sort {$edges{"M"}[$a]->[0] <=> $edges{"M"}[$b]->[0]} @{$c};
 		push(@multiLoops,\@c);
@@ -196,7 +209,6 @@ sub buildStructureMap {
 	    my $xCount = 0;
 	    my @c = sort {$edges{"M"}[$a]->[0] <=> $edges{"M"}[$b]->[0]} @{$c};
 	    for my $x (@c) {
-		$xCount++;
 		my($xStart,$xStop) = @{$edges{"M"}[$x]};
 		my $xSeq = substr($seq,$xStart-1,$xStop-$xStart+1);
 		my $bp5_pos1 = $xStart-1;
@@ -210,7 +222,10 @@ sub buildStructureMap {
 		#print "checking $u  at $uStart $uStop\n";
 		my @xKnots = includesKnot($xStart,$xStop,$knots);
 		my $PK = @xKnots ? "PK{".join(',',@xKnots)."}" : "";
-		push(@{$structureTypes{"X"}},"X$xCount $xStart..$xStop \"$xSeq\" ($bp5_pos1,$bp5_pos2) $nuc5_1:$nuc5_2 ($bp3_pos1,$bp3_pos2) $nuc3_1:$nuc3_2 $PK\n") if($xStart < $xStop);
+		if($xStart <= $xStop) {
+		    $xCount++;
+		    push(@{$structureTypes{"X"}},"X$xCount $xStart..$xStop \"$xSeq\" ($bp5_pos1,$bp5_pos2) $nuc5_1:$nuc5_2 ($bp3_pos1,$bp3_pos2) $nuc3_1:$nuc3_2 $PK\n");
+		}
 		for my $k (@xKnots) {
 		    #print "visited $k uKnot";
 		    push(@{$pkLoops{$k}},["X$xCount",$xStart,$xStop]);
@@ -278,6 +293,13 @@ sub buildStructureMap {
 	    $prevChar = $s->[$i];
 	    $FIRST = 0;
 	} elsif(($prevChar eq "S")&&($bp->{$i+1}+1 != $bp->{$i})) {
+	    # in a break in a stem into another stem. store in 1-based
+	    push(@{$regions{$prevChar}},[$thisStart+1,$thisStop+1]);
+	    $thisStart = $i;
+            $thisStop = $i;
+            $prevChar = $s->[$i];
+	    $FIRST = 0;
+	} elsif(($prevChar eq "S")&&($bp->{$i} == $i+1)) {
 	    # in a break in a stem into another stem. store in 1-based
 	    push(@{$regions{$prevChar}},[$thisStart+1,$thisStop+1]);
 	    $thisStart = $i;
@@ -473,7 +495,7 @@ sub buildStructureMap {
 }
 
 sub buildSegmentGraph {
-    my($bp,$segments,$knots) = @_;
+    my($seq,$bp,$segments,$knots) = @_;
     # 
     # 5'start   3'stop
     #       ACGUA
@@ -637,7 +659,7 @@ sub printStructureData {
 }
 
 sub isMultiLoop() {
-    my($c,$mG) = @_;    
+    my($c,$mG,$edges) = @_;    
     $,=" ";
     # make copy of components
     my @c = @{$c};
@@ -663,6 +685,10 @@ sub isMultiLoop() {
 		return 0;
 	    }
 	    $v = $w;	
+	    unless(my @successors = $mG->successors($v)) {
+		#print "leaving here 3\n";
+		return 0;
+	    }
 	} else {
 	    return 0;
 	}
@@ -885,11 +911,11 @@ sub pkQuartet {
 sub getSegments {
     my($bp) = @_;
     #
-    # 5'start   3'stop
-    #       ACGUA
-    #       |||||
-    #       UGCAU
-    # 3'start   5'stop
+    # 5'start    3'stop
+    #       ACG.UA
+    #       ||| ||
+    #       UGCAAU
+    # 3'start    5'stop
     #
     my @allSegments = ();
     my($firstPos,$lastPos) = getExtremePositions($bp);
@@ -917,7 +943,9 @@ sub getSegments {
 			push(@segment,[$n,$p]);
 			$i = $n;
 			$j = $p;	    
-		    } else {		
+		    } else {	
+			#print "closed - $i, $j\n";
+			#print "Found " . scalar(@allSegments) . " segments\n";
 			$INSEGMENT = 0;
 			push(@allSegments,\@segment);		
 		    }
@@ -991,19 +1019,21 @@ sub separateSegments {
 	}
 	$warnings .= $warning;
     }
-    if(@{$segments} == keys(%knot)) {
-	# everything is involved in a PK! 
-	# assign the largest to not be a PK segment
-	my $maxSize = 0;
-	my $maxI;
-	for(my $i=0;$i<@{$segments};$i++) {
-	    if(@{$segments->[$i]} > $maxSize) {
-		$maxI = $i;
-		$maxSize = @{$segments->[$i]}
+    if(@{$segments}) {
+	if(@{$segments} == keys(%knot)) {
+	    # everything is involved in a PK! 
+	    # assign the largest to not be a PK segment
+	    my $maxSize = 0;
+	    my $maxI;
+	    for(my $i=0;$i<@{$segments};$i++) {
+		if(@{$segments->[$i]} > $maxSize) {
+		    $maxI = $i;
+		    $maxSize = @{$segments->[$i]}
+		}
 	    }
+	    # remove largest segment from knot list:
+	    delete($knot{$maxI});
 	}
-	# remove largest segment from knot list:
-	delete($knot{$maxI});
     }
     my @segments;
     my @knots;    
@@ -1290,6 +1320,15 @@ sub isPathGraph {
     }
 }
 
+sub min {
+    my($x,$y) = @_;
+    if($x < $y) {
+	return $x;
+    } else {
+	return $y;
+    }
+}
+
 sub max {
     my($a,$b) = @_;
     if($b > $a) {
@@ -1409,12 +1448,119 @@ sub includesKnot {
     return @loopKnots;
 }
 
-sub min {
-    my($x,$y) = @_;
-    if($x < $y) {
-	return $x;
+sub pairMap {
+    my ($dotbracket) = @_;
+    my @map;
+    my %stack;
+    for (my $i=0; $i<length($dotbracket); $i++) {
+	my $c = substr($dotbracket,$i,1);
+        if($c =~ /[\(\[\<\{A-Z]/){
+	    # left symbols
+            push(@{$stack{$c}},$i);
+        } elsif($c =~ /[\)\]\>\}a-z]/){
+	    # right symbols
+            my $C = charMap($c);
+            my $pos = pop(@{$stack{$C}});
+	    # 0-based to 1-based. See print above.
+            $map[$pos] = $i+1;
+            $map[$i] = $pos+1;
+	    #print "$pos ", $i+1, "\n";
+        } elsif($c =~ /[-_,:.]/) {
+            $map[$i] = "0";
+        } else {
+            die "Unknown character $c found in\n$dotbracket\n";
+        }
+    }
+    return @map;
+}
+
+sub charMap {
+    my($c) = @_;
+    if($c eq ")") {
+	return "(";
+    } elsif($c eq "]") {
+        return "[";
+    } elsif($c eq ">") {
+        return "<";
+    } elsif($c eq "}") {
+        return "{";
+    } elsif($c =~ /[a-z]/) {
+        return uc($c);
     } else {
-	return $y;
+        die "undefined character in charMap: $c\n";
+    }
+}
+
+#####################
+# INPUT SUBROUTINES #
+#####################
+
+sub isBPSeqFile {
+    my($inputFile) = @_;
+    open(BPS,$inputFile) or die "Could not open $inputFile\n";
+    while(<BPS>) {
+	unless(/^#/) {
+	    chomp;
+	    if(scalar(split()) != 3) {
+		close(BPS);
+		return 0
+	    }
+	}
+    }
+    close(BPS);
+    return 1;
+}
+
+sub isDotBracketFile {
+    my($inputFile) = @_;
+    open(IN,$inputFile) or die "Could not open $inputFile for reading\n";
+    my($defline,$sequence,$dotbracket);
+    my @lines;
+    while(<IN>) {
+	unless(/^#/) {
+	    chomp;
+	    if($_) {
+		push(@lines,$_)
+	    }
+	}
+    }
+    if(@lines == 2) {
+	$sequence = $lines[0];
+	$dotbracket = $lines[1];
+    } elsif(@lines == 3) {
+	$defline = $lines[0];
+	$sequence = $lines[1];
+	$dotbracket = $lines[2];
+    } else {
+	#die("zone1");
+	return 0;
+    }
+    if($defline) {
+	unless(substr($defline,0,1) eq ">") {
+	    #die("zone2");
+	    return 0;
+	}
+    }
+    if(length($sequence) == length($dotbracket)) {
+	return 1;
+    } elsif($dotbracket =~ /\s+/) {
+	# could have an energy term
+	my @terms = split(/\s+/,$dotbracket);
+	if(@terms == 2) {
+	    if(length($terms[0]) == length($sequence)) {
+		$dotbracket = $terms[0];
+		return 1;
+	    } else {
+		die("zone5");
+		return 0;
+	    }
+	} else {
+	    die("zone4");
+	    return 0;
+	}
+    } else {
+	die("zone3");
+	return 0;
     }
 }
 
@@ -1447,4 +1593,64 @@ sub readBPSeqFile {
 	}
     }
     return(\%bp,$seq);
+}
+
+sub readDotBracketFile {
+    my($dotbracketFile)=@_;
+    open(IN,$dotbracketFile) or die "Could not open $dotbracketFile for reading\n";
+    my($defline,$sequence,$dotbracket);
+    my @lines;
+    while(<IN>) {
+	unless(/^#/) {
+	    chomp;
+	    if($_) {
+		push(@lines,$_)
+	    }
+	}
+    }
+    if(@lines == 2) {
+	$sequence = $lines[0];
+	$dotbracket = $lines[1];
+    } elsif(@lines == 3) {
+	$defline = $lines[0];
+	$sequence = $lines[1];
+	$dotbracket = $lines[2];
+    }
+    if($dotbracket =~ /\s+/) {
+	# could have an energy term
+	my @terms = split(/\s+/,$dotbracket);
+	$dotbracket = $terms[0];
+    }
+    close(IN);
+    my @map=pairMap($dotbracket);
+    my %bp;
+    for(my $i=0;$i<@map;$i++) {
+	$bp{$i+1} = $map[$i];
+    }
+    return(\%bp,$sequence);
+}
+
+sub dotBracketToStructureArray {
+    my($seq,$dotbracket) = @_;
+
+    # if there are basepairs
+    my %bp;
+    my @map=pairMap($dotbracket);
+    for(my $i=0;$i<@map;$i++) {
+	$bp{$i+1} = $map[$i];
+    }
+    
+    if(keys %bp) {
+	my $allSegments = getSegments(\%bp);
+	my($segments,$knots,$warnings) = separateSegments($allSegments);
+	my $bp = filterBasePairs(\%bp,$knots);
+	$segments = getSegments($bp);
+	my($dotbracket,$s,$k,$structureTypes,$pageNumber) = buildStructureMap($segments,$knots,$bp,$seq);
+	$s = join("",@{$s});
+	return $s
+    } else {
+	# default to all external loops
+	my $s = "E" x length($seq);
+	return $s
+    }
 }
